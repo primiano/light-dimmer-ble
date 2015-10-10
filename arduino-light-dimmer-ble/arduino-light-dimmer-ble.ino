@@ -125,10 +125,13 @@ volatile uint32_t last_zerocross_isr_time;
 volatile uint8_t zerocross_isr_flag;
 uint16_t num_cycles;
 uint8_t led2_state;
+uint8_t mins_since_last_remote_command;
+
 DimmerChannel<SSR1_PIN> ch1;
 DimmerChannel<SSR2_PIN> ch2;
 DimmerChannel<SSR3_PIN> ch3;
 DimmerChannel<SSR4_PIN> ch4;
+
 
 void setup()
 {
@@ -145,6 +148,7 @@ void setup()
   ch3.initialize();
   ch4.initialize();
 
+  mins_since_last_remote_command = 0;
   Serial.begin(9600);
   initialize_hm10_beacon();
 
@@ -166,6 +170,17 @@ void loop()
     ++num_cycles;
     digitalWrite(LED1, (num_cycles & 0x10) ? HIGH : LOW);
     if (num_cycles == 600)  {  // Every ~1 minute
+      ++mins_since_last_remote_command;
+      if (mins_since_last_remote_command >= 240) {  // Every ~4 hours.
+        ch1.set_duty_cycle_smoothing_rate(1);
+        ch1.set_brightness(0);
+        ch2.set_duty_cycle_smoothing_rate(1);
+        ch2.set_brightness(0);
+        ch3.set_duty_cycle_smoothing_rate(1);
+        ch3.set_brightness(0);
+        ch4.set_duty_cycle_smoothing_rate(1);
+        ch4.set_brightness(0);
+      }
       ch1.store_brightness_in_eeprom();
       ch2.store_brightness_in_eeprom();
       ch3.store_brightness_in_eeprom();
@@ -250,6 +265,7 @@ void hm10_beacon_receive() {
   cmd.raw = Serial.read();
   if (cmd.raw != Serial.peek())
     return;
+
   Serial.read();  // Consume the copy msg;
   if (cmd.op == SET_PERIOD)  {
     switch (cmd.channel) {
@@ -268,6 +284,7 @@ void hm10_beacon_receive() {
   }
   led2_state = led2_state ? LOW : HIGH;
   digitalWrite(LED2, led2_state);
+  mins_since_last_remote_command = 0;
 }
 
 void hm10_beacon_send_current_brightness() {
