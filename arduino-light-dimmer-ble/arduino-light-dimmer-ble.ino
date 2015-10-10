@@ -168,18 +168,18 @@ void loop()
     ch3.on_zero_cross();
     ch4.on_zero_cross();
 
-    ++g_num_cycles;
+    ++g_num_cycles;  // 1 cycle = 10ms @ 50 Hz.
     digitalWrite(LED1, (g_num_cycles & 0x10) ? HIGH : LOW);
-    if (g_num_cycles == 6000)  {  // Every ~10 mins
+    if (g_num_cycles == 6000)  {  // ~ every minute
       ++g_mins_since_last_remote_command;
-      if (g_mins_since_last_remote_command >= 24)  // Every ~4 hours.
+      if (g_mins_since_last_remote_command >= 240)  // Every ~4 hours.
         turn_all_off_smoothly();
       ch1.store_brightness_in_eeprom();
       ch2.store_brightness_in_eeprom();
       ch3.store_brightness_in_eeprom();
       ch4.store_brightness_in_eeprom();
       g_num_cycles = 0;
-    } else if ((g_num_cycles & 63) == 32) {  // Every ~3.2 seconds.
+    } else if (((uint8_t) g_num_cycles) == 127) {  // Every ~1.28 seconds.
       hm10_beacon_send_current_brightness();
     }
   }
