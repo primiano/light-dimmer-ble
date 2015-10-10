@@ -9,10 +9,10 @@
 #define LED2 11
 
 #define PIN_ZCROSS 3
-#define SSR1_PIN A0
-#define SSR2_PIN A1
-#define SSR3_PIN A2
-#define SSR4_PIN A3
+#define SSR1_PIN A3
+#define SSR2_PIN A0
+#define SSR3_PIN A1
+#define SSR4_PIN A2
 #define INITIAL_SMOOTHING_US 2000
 
 // Maps a brigthness value [0-31] to a duty-cycle value in the range
@@ -36,6 +36,15 @@ union cmd_t {
   };
 };
 
+
+volatile uint8_t g_zerocross_isr_flag;
+volatile uint32_t g_zerocross_time;
+uint32_t g_now;
+uint16_t g_num_cycles;
+uint8_t g_led2_state;
+uint8_t g_mins_since_last_remote_command;
+
+
 template<unsigned int PIN>
 class DimmerChannel {
   public:
@@ -51,7 +60,9 @@ class DimmerChannel {
       duty_cycle_smoothing_rate_us_ = INITIAL_SMOOTHING_US;
     }
 
-    void on_zero_cross(const uint32_t& last_zerocross_time) {
+    void on_zero_cross() {
+      digitalWrite(PIN, LOW);
+
       // Perform smoothing adjustement to converge towards the
       // |target_duty_cycle_us| set-point.
       if (current_duty_cycle_us_ > target_duty_cycle_us_) {
@@ -63,7 +74,7 @@ class DimmerChannel {
       }
 
       // Calculate the absolute time for the next SSR trigger.
-      next_trigger_time_ = last_zerocross_time + current_duty_cycle_us_;
+      next_trigger_time_ = g_now + current_duty_cycle_us_;
     }
 
     void store_brightness_in_eeprom() {
@@ -76,15 +87,11 @@ class DimmerChannel {
       EEPROM.update(PIN, brightness_);
     }
 
-    void trigger_ssr_if_time(const uint32_t& now) {
-      if (now >= next_trigger_time_) {
+    void trigger_ssr_if_time() {
+      if (g_now >= next_trigger_time_) {
         digitalWrite(PIN, HIGH);
         next_trigger_time_ = -1;
       }
-    }
-
-    inline void reset_ssr() {
-      digitalWrite(PIN, LOW);
     }
 
     inline uint8_t brightness() const {
@@ -101,7 +108,7 @@ class DimmerChannel {
     }
 
     void set_duty_cycle_smoothing_rate(uint8_t value) {
-      duty_cycle_smoothing_rate_us_ = ((uint16_t) (value + 1)) << 2ul;
+      duty_cycle_smoothing_rate_us_ = ((uint16_t) (value + 1)) << 2;
     }
 
   private:
@@ -120,12 +127,6 @@ class DimmerChannel {
     uint16_t target_duty_cycle_us_;
     uint8_t brightness_;
 };
-
-volatile uint32_t last_zerocross_isr_time;
-volatile uint8_t zerocross_isr_flag;
-uint16_t num_cycles;
-uint8_t led2_state;
-uint8_t mins_since_last_remote_command;
 
 DimmerChannel<SSR1_PIN> ch1;
 DimmerChannel<SSR2_PIN> ch2;
@@ -148,64 +149,63 @@ void setup()
   ch3.initialize();
   ch4.initialize();
 
-  mins_since_last_remote_command = 0;
+  g_mins_since_last_remote_command = 0;
   Serial.begin(9600);
   initialize_hm10_beacon();
 
-  zerocross_isr_flag = 0;
-  last_zerocross_isr_time = 0;
+  g_zerocross_isr_flag = 0;
+  g_now = micros();
   attachInterrupt(digitalPinToInterrupt(PIN_ZCROSS), isr_zerocross, RISING);
 }
 
 void loop()
 {
-  if (zerocross_isr_flag) {
-    zerocross_isr_flag = 0;
-    const uint32_t zerocross_time = last_zerocross_isr_time;
-    ch1.on_zero_cross(zerocross_time);
-    ch2.on_zero_cross(zerocross_time);
-    ch3.on_zero_cross(zerocross_time);
-    ch4.on_zero_cross(zerocross_time);
+  if (g_zerocross_isr_flag) {
+    g_now = g_zerocross_time;
+    g_zerocross_isr_flag = 0;
+    ch1.on_zero_cross();
+    ch2.on_zero_cross();
+    ch3.on_zero_cross();
+    ch4.on_zero_cross();
 
-    ++num_cycles;
-    digitalWrite(LED1, (num_cycles & 0x10) ? HIGH : LOW);
-    if (num_cycles == 600)  {  // Every ~1 minute
-      ++mins_since_last_remote_command;
-      if (mins_since_last_remote_command >= 240) {  // Every ~4 hours.
-        ch1.set_duty_cycle_smoothing_rate(1);
-        ch1.set_brightness(0);
-        ch2.set_duty_cycle_smoothing_rate(1);
-        ch2.set_brightness(0);
-        ch3.set_duty_cycle_smoothing_rate(1);
-        ch3.set_brightness(0);
-        ch4.set_duty_cycle_smoothing_rate(1);
-        ch4.set_brightness(0);
-      }
+    ++g_num_cycles;
+    digitalWrite(LED1, (g_num_cycles & 0x10) ? HIGH : LOW);
+    if (g_num_cycles == 6000)  {  // Every ~10 mins
+      ++g_mins_since_last_remote_command;
+      if (g_mins_since_last_remote_command >= 24)  // Every ~4 hours.
+        turn_all_off_smoothly();
       ch1.store_brightness_in_eeprom();
       ch2.store_brightness_in_eeprom();
       ch3.store_brightness_in_eeprom();
       ch4.store_brightness_in_eeprom();
-      num_cycles = 0;
-    } else if ((num_cycles & 63) == 32) {  // Every ~3.2 seconds.
+      g_num_cycles = 0;
+    } else if ((g_num_cycles & 63) == 32) {  // Every ~3.2 seconds.
       hm10_beacon_send_current_brightness();
     }
   }
 
-  uint32_t now = micros();
-  ch1.trigger_ssr_if_time(now);
-  ch2.trigger_ssr_if_time(now);
-  ch3.trigger_ssr_if_time(now);
-  ch4.trigger_ssr_if_time(now);
+  g_now = micros();
+  ch1.trigger_ssr_if_time();
+  ch2.trigger_ssr_if_time();
+  ch3.trigger_ssr_if_time();
+  ch4.trigger_ssr_if_time();
   hm10_beacon_receive();
 }
 
 void isr_zerocross() {
-  ch1.reset_ssr();
-  ch2.reset_ssr();
-  ch3.reset_ssr();
-  ch4.reset_ssr();
-  last_zerocross_isr_time = micros();
-  zerocross_isr_flag = 1;
+  g_zerocross_time = micros();
+  g_zerocross_isr_flag = 1;
+}
+
+void turn_all_off_smoothly() {
+  ch1.set_duty_cycle_smoothing_rate(1);
+  ch1.set_brightness(0);
+  ch2.set_duty_cycle_smoothing_rate(1);
+  ch2.set_brightness(0);
+  ch3.set_duty_cycle_smoothing_rate(1);
+  ch3.set_brightness(0);
+  ch4.set_duty_cycle_smoothing_rate(1);
+  ch4.set_brightness(0);
 }
 
 void initialize_hm10_beacon() {
@@ -222,7 +222,6 @@ void initialize_hm10_beacon() {
     }
   }
 }
-
 
 bool initialize_hm10_attempt() {
   Serial.setTimeout(2000);
@@ -274,7 +273,7 @@ void hm10_beacon_receive() {
       case 2: ch3.set_brightness(cmd.value); break;
       case 3: ch4.set_brightness(cmd.value); break;
     }
-  } else /* cmd.op == SET_SMOOTHING */ {
+  } else { /* cmd.op == SET_SMOOTHING */
     switch (cmd.channel) {
       case 0: ch1.set_duty_cycle_smoothing_rate(cmd.value); break;
       case 1: ch2.set_duty_cycle_smoothing_rate(cmd.value); break;
@@ -282,9 +281,9 @@ void hm10_beacon_receive() {
       case 3: ch4.set_duty_cycle_smoothing_rate(cmd.value); break;
     }
   }
-  led2_state = led2_state ? LOW : HIGH;
-  digitalWrite(LED2, led2_state);
-  mins_since_last_remote_command = 0;
+  g_led2_state = g_led2_state ? LOW : HIGH;
+  digitalWrite(LED2, g_led2_state);
+  g_mins_since_last_remote_command = 0;
 }
 
 void hm10_beacon_send_current_brightness() {
