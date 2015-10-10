@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/LightsDimmer.iml" filepath="$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/LightsDimmer.iml" />
+      <module fileurl="file://$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/mobile/mobile.iml" filepath="$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/mobile/mobile.iml" />
+      <module fileurl="file://$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/tv/tv.iml" filepath="$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/tv/tv.iml" />
+    </modules>
+  </component>
+</project>
