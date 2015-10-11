@@ -108,7 +108,7 @@ class DimmerChannel {
     }
 
     void set_duty_cycle_smoothing_rate(uint8_t value) {
-      duty_cycle_smoothing_rate_us_ = ((uint16_t) (value + 1)) << 2;
+      duty_cycle_smoothing_rate_us_ = ((uint16_t) (value + 1)) << 1;
     }
 
   private:
