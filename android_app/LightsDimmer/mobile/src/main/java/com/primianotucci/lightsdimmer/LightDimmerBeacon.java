@@ -47,12 +47,14 @@ public class LightDimmerBeacon {
 
 
     public void Start() {
+        mCommandQueue.clear();
         ScanFilter beaconFilter = new ScanFilter.Builder().setServiceUuid(
                 new ParcelUuid(SERVICE_UUID)).build();
         List<ScanFilter> filters = new ArrayList<ScanFilter>();
         filters.add(beaconFilter);
         ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
         BluetoothManager manager = (BluetoothManager) mContext.getSystemService(Context.BLUETOOTH_SERVICE);
+        manager.getAdapter().enable();
         mBluetoothScanner = manager.getAdapter().getBluetoothLeScanner();
         mBluetoothScanner.startScan(filters, settings, new MyScanCallback());
         mListener.onStateChange("Starting scan");
@@ -68,6 +70,10 @@ public class LightDimmerBeacon {
                 return;
             }
             device.connectGatt(mContext, false, new MyGattCallback());
+        }
+        @Override
+        public void onScanFailed(int errorCode) {
+            mListener.onStateChange("Scan failed:® " + errorCode);
         }
     }
 
@@ -97,7 +103,7 @@ public class LightDimmerBeacon {
         @Override
         public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             Log.d("light", "Wrote " + Integer.toHexString(characteristic.getValue()[0]) + ". Status: " + status);
-            mListener.onStateChange("Wrote " + Integer.toHexString(characteristic.getValue()[0]) + ". Status: " + status);
+            //mListener.onStateChange("Wrote " + Integer.toHexString(characteristic.getValue()[0]) + ". Status: " + status);
             synchronized (mCommandQueue) {
                 mCommandQueue.removeFirst();
                 DrainCommandQueue();
@@ -107,7 +113,7 @@ public class LightDimmerBeacon {
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             String status = characteristic.getStringValue(0);
-            mListener.onStateChange("RX " + status);
+            //mListener.onStateChange("RX " + status);
             int numSetpoints = status.length() / 2;
             int values[] = new int[numSetpoints];
             for (int i = 0; i < numSetpoints; ++i) {

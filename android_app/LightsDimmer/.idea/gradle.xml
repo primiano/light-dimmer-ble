@@ -11,7 +11,6 @@
           <set>
             <option value="$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer" />
             <option value="$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/mobile" />
-            <option value="$USER_HOME$/gdrive/Progetti/light-dimmer-ble/android_app/LightsDimmer/tv" />
           </set>
         </option>
       </GradleProjectSettings>

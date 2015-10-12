@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">LightsDimmer</string>
-    <string name="action_settings">Settings</string>
+    <string name="app_name">Lighting Controller</string>
+    <string name="action_reset">Reset</string>
 </resources>
