@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Light dimmer BLE</title>
+    <style type="text/css">
+    #controller {
+      width: 100%;
+      height: 500px;
+      border: 1px solid #aaa;
+    }
+    #log { width: 100%; }
+    </style>
+  </head>
+  <body>
+    <canvas id="controller"></canvas>
+    <textarea id="log" rows=1></textarea>
+    <script>
+'use strict';
+var g_characteristic = undefined;
+var g_brightness = [0, 0, 0, 0];
+var g_lastBrightness = [0, 0, 0, 0];
+var g_brightnessStart = undefined;
+var g_touchStart = undefined;
+var g_touchStartTime = 0;
+var g_canvas = document.getElementById('controller');
+var g_curChannel = -1;
+var g_ctx = g_canvas.getContext('2d');
+
+function init() {
+  g_canvas.addEventListener('touchstart', e => {
+    if (g_characteristic === undefined) {
+      scan();
+      return;
+    }
+    g_touchStart = [e.targetTouches[0].pageX, e.targetTouches[0].pageY];
+    g_curChannel = Math.min(~~(g_touchStart[0] * 4 / g_canvas.clientWidth), 3);
+    setSmoothing(g_curChannel, 1);
+    g_brightnessStart = g_brightness.slice();
+    g_touchStartTime = performance.now();
+    e.preventDefault();
+  }, true);
+
+  g_canvas.addEventListener('touchend', e => {
+    if (g_touchStart === undefined)
+      return;
+    var v = performance.now() - g_touchStartTime;
+    let minV = 100;
+    let maxV = 2000;
+    v = Math.max(Math.min(v, maxV), minV);
+    v = (Math.log(v) - Math.log(minV)) / (Math.log(maxV) - Math.log(minV));
+    v = ~~(31 * (1 - v));
+    log('sm ' + g_curChannel + ' = ' + v);
+    setSmoothing(g_curChannel, v);
+    g_touchStart = undefined;
+    e.preventDefault();
+  }, true);
+
+  g_canvas.addEventListener('touchmove', e => {
+    if (g_touchStart === undefined)
+      return;
+    var i = g_curChannel;
+    var dy = e.targetTouches[0].pageY - g_touchStart[1];
+    g_brightness[i] = g_brightnessStart[i] + (dy / g_canvas.clientHeight);
+    g_brightness[i] = Math.min(Math.max(g_brightness[i], 0), 1);
+    e.preventDefault();
+  }, true);
+
+  animate();
+}
+
+function draw() {
+  var w = g_canvas.clientWidth;
+  var h = g_canvas.clientHeight;
+  g_canvas.width = w;
+  g_canvas.height = h;
+  var ctx = g_ctx;
+  let colorsL = [ '#F8BBD0', '#BBDEFB', '#DCEDC8', '#FFECB3' ];
+  let colorsS = [ '#E91E63', '#2196F3', '#8BC34A', '#FFC107' ];
+  for (let i = 0; i < 4; ++i) {
+    ctx.fillStyle = colorsL[i];
+    ctx.fillRect(w/4 * i, 0, w/4 * (i + 1), h);
+    ctx.fillStyle = colorsS[i];
+    ctx.fillRect(w/4 * i, 0, w/4 * (i + 1),  h * g_brightness[i]);
+  }
+}
+
+function animate() {
+  draw();
+  for (let i = 0; i < 4; ++i) {
+    if (g_characteristic !== undefined && g_brightness[i] != g_lastBrightness[i]) {
+      setBrightness(i, ~~(g_brightness[i] * 31));
+      g_lastBrightness[i] = g_brightness[i];
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+init();
+
+
+function log(x) {
+  document.getElementById('log').innerHTML = x + '\n';
+}
+
+function setBrightness(channel, brightness) {
+  return sendControlWord((channel << 5) | brightness);
+}
+
+function setSmoothing(channel, smoothing) {
+  return sendControlWord((channel << 5) | smoothing | 0x80);
+}
+
+function sendControlWord(word) {
+  let cmd = new Uint8Array([word, word]);
+  return g_characteristic.writeValue(cmd);
+}
+
+function scan() {
+  log('starting');
+  let serviceUuid = 0xffe0;
+  let characteristicUuid = 0xffe1;
+  let options = {filters:[{services:[ serviceUuid ]}]};
+  navigator.bluetooth.requestDevice(options)
+    .then(device => {
+        log('Got device ' + device); return device.connectGATT()})
+    .then(server => server.getPrimaryService(serviceUuid))
+    .then(service => service.getCharacteristic(characteristicUuid))
+    .then(characteristic => {
+      log('Connected ' + characteristic);
+      g_characteristic = characteristic;
+    })
+    .catch(error => {
+     log('Argh! ' + error);
+    });
+}
+    </script>
+  </body>
+</html>
